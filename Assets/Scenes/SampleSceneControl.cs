@@ -5,7 +5,7 @@ public class SampleSceneControl : MonoBehaviour
     void Start()
     {
         Debug.Log("SampleSceneControl Start");
-        string audioFilePath = Application.dataPath + "Scenes/audio.ogg";
+        string audioFilePath = Application.dataPath + "Scenes/audio_example.ogg";
         SpleeterAudioSeparation(audioFilePath);
     }
 
