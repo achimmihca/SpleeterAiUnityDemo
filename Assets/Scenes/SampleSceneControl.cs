@@ -1,7 +1,5 @@
 using UnityEngine;
 using Unity.Sentis;
-using Unity.Sentis.ONNX;
-using Unity.Sentis.Layers;
 using System.Collections;
 using System.IO;
 
@@ -21,8 +19,8 @@ public class SampleSceneControl : MonoBehaviour
     private AudioClip vocalsAudioClip;
     private AudioClip accompanimentAudioClip;
     
-    private bool isProcessing = false;
-    private bool modelsLoaded = false;
+    private bool isProcessing;
+    private bool modelsLoaded;
 
     void Start()
     {

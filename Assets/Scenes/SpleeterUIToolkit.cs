@@ -40,9 +40,6 @@ public class SpleeterUIToolkit : MonoBehaviour
 
         // Setup UI
         SetupUI();
-        
-        // Start update coroutine
-        StartCoroutine(UpdateUI());
     }
 
     private void SetupUI()
@@ -108,16 +105,11 @@ public class SpleeterUIToolkit : MonoBehaviour
         UpdateButtonStates();
     }
 
-    private IEnumerator UpdateUI()
+    private void Update()
     {
-        while (true)
-        {
-            UpdateStatus();
-            UpdateButtonStates();
-            UpdateInfo();
-            
-            yield return new WaitForSeconds(0.1f); // Update every 100ms
-        }
+        UpdateStatus();
+        UpdateButtonStates();
+        UpdateInfo();
     }
 
     private void UpdateStatus()
