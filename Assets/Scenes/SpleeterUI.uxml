@@ -1,0 +1,57 @@
+<?xml version="1.0" encoding="utf-8"?>
+<engine:UXML
+    xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+    xmlns:engine="UnityEngine.UIElements"
+    xmlns:editor="UnityEditor.UIElements"
+    xsi:noNamespaceSchemaLocation="../../../../../UIElementsSchema/UIElements.xsd">
+
+    <engine:ScrollView name="spleeter-scrollview" class="spleeter-scrollview">
+        <engine:VisualElement name="spleeter-ui" class="spleeter-container">
+            <engine:Label text="Spleeter AI Audio Separation" class="title" />
+            
+            <!-- Status Section -->
+            <engine:VisualElement class="status-section">
+                <engine:Label text="Status" class="section-title" />
+                <engine:Label name="status-text" text="Initializing..." class="status-text" />
+                <engine:ProgressBar name="progress-bar" class="progress-bar" />
+            </engine:VisualElement>
+            
+            <!-- Control Section -->
+            <engine:VisualElement class="control-section">
+                <engine:Label text="Controls" class="section-title" />
+                <engine:Button name="process-button" text="Process Audio" class="primary-button" />
+                <engine:Button name="stop-button" text="Stop Audio" class="secondary-button" />
+            </engine:VisualElement>
+            
+            <!-- Audio Playback Section -->
+            <engine:VisualElement class="playback-section">
+                <engine:Label text="Audio Playback" class="section-title" />
+                <engine:VisualElement class="button-row">
+                    <engine:Button name="play-original-button" text="Play Original" class="audio-button" />
+                    <engine:Button name="play-vocals-button" text="Play Vocals" class="audio-button" />
+                    <engine:Button name="play-accompaniment-button" text="Play Accompaniment" class="audio-button" />
+                </engine:VisualElement>
+            </engine:VisualElement>
+            
+            <!-- Info Section -->
+            <engine:VisualElement class="info-section">
+                <engine:Label text="Audio Information" class="section-title" />
+                <engine:Label name="info-text" text="No audio loaded" class="info-text" />
+            </engine:VisualElement>
+            
+            <!-- Settings Section -->
+            <engine:VisualElement class="settings-section">
+                <engine:Label text="Settings" class="section-title" />
+                <engine:VisualElement class="setting-row">
+                    <engine:Label text="Audio File:" class="setting-label" />
+                    <engine:TextField name="audio-file-field" value="audio_example.ogg" class="setting-field" />
+                </engine:VisualElement>
+                <engine:VisualElement class="setting-row">
+                    <engine:Label text="Save Files:" class="setting-label" />
+                    <engine:Toggle name="save-files-toggle" value="true" class="setting-toggle" />
+                </engine:VisualElement>
+            </engine:VisualElement>
+        </engine:VisualElement>
+    </engine:ScrollView>
+
+</engine:UXML> 
