@@ -262,12 +262,9 @@ public class SampleSceneControl : MonoBehaviour
 
     private IEnumerator SaveAudioClipToFile(AudioClip audioClip, string filePath)
     {
-        // Convert AudioClip to WAV format
-        byte[] wavData = ConvertAudioClipToWAV(audioClip);
-
         try
         {
-            File.WriteAllBytes(filePath, wavData);
+            WavFileWriter.WriteFile(filePath, audioClip);
             Debug.Log($"Saved audio file: {filePath}");
         }
         catch (System.Exception e)
@@ -276,61 +273,6 @@ public class SampleSceneControl : MonoBehaviour
         }
 
         yield return null;
-    }
-
-    private byte[] ConvertAudioClipToWAV(AudioClip audioClip)
-    {
-        // Simple WAV conversion
-        float[] samples = new float[audioClip.samples * audioClip.channels];
-        audioClip.GetData(samples, 0);
-
-        // Convert to 16-bit PCM
-        byte[] wavData = new byte[44 + samples.Length * 2]; // 44 bytes header + 2 bytes per sample
-
-        // WAV header
-        int pos = 0;
-
-        // RIFF header
-        System.Text.Encoding.ASCII.GetBytes("RIFF").CopyTo(wavData, pos);
-        pos += 4;
-        System.BitConverter.GetBytes(wavData.Length - 8).CopyTo(wavData, pos);
-        pos += 4;
-        System.Text.Encoding.ASCII.GetBytes("WAVE").CopyTo(wavData, pos);
-        pos += 4;
-
-        // fmt chunk
-        System.Text.Encoding.ASCII.GetBytes("fmt ").CopyTo(wavData, pos);
-        pos += 4;
-        System.BitConverter.GetBytes(16).CopyTo(wavData, pos);
-        pos += 4; // fmt chunk size
-        System.BitConverter.GetBytes((short)1).CopyTo(wavData, pos);
-        pos += 2; // PCM format
-        System.BitConverter.GetBytes((short)audioClip.channels).CopyTo(wavData, pos);
-        pos += 2;
-        System.BitConverter.GetBytes(audioClip.frequency).CopyTo(wavData, pos);
-        pos += 4;
-        System.BitConverter.GetBytes(audioClip.frequency * audioClip.channels * 2).CopyTo(wavData, pos);
-        pos += 4; // byte rate
-        System.BitConverter.GetBytes((short)(audioClip.channels * 2)).CopyTo(wavData, pos);
-        pos += 2; // block align
-        System.BitConverter.GetBytes((short)16).CopyTo(wavData, pos);
-        pos += 2; // bits per sample
-
-        // data chunk
-        System.Text.Encoding.ASCII.GetBytes("data").CopyTo(wavData, pos);
-        pos += 4;
-        System.BitConverter.GetBytes(samples.Length * 2).CopyTo(wavData, pos);
-        pos += 4;
-
-        // Convert float samples to 16-bit PCM
-        for (int i = 0; i < samples.Length; i++)
-        {
-            short sample = (short)(samples[i] * 32767f);
-            System.BitConverter.GetBytes(sample).CopyTo(wavData, pos);
-            pos += 2;
-        }
-
-        return wavData;
     }
 
     void OnDestroy()
