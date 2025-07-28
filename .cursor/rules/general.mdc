@@ -6,7 +6,7 @@ alwaysApply: true
 # General Project Guidelines
 
 ## Technical Stack
-- Unity Engine Project
+- Unity Project, version 6.1, more specifically 6000.1.0f1
 - Unity Sentis to run AI tools
 
 ## Code Style
