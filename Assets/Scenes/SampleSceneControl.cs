@@ -116,9 +116,6 @@ public class SampleSceneControl : MonoBehaviour
         // Process with both models
         yield return ProcessAudioWithModels(audioTensor);
 
-        // Convert results back to AudioClips
-        yield return ConvertResultsToAudioClips();
-
         // Save separated audio files if requested
         if (saveSeparatedAudio)
         {
@@ -230,13 +227,6 @@ public class SampleSceneControl : MonoBehaviour
 
         Debug.Log("Converted tensors to AudioClips");
 
-        yield return null;
-    }
-
-    private IEnumerator ConvertResultsToAudioClips()
-    {
-        // This method is called from ProcessAudioWithModels
-        // The conversion is already done there
         yield return null;
     }
 
