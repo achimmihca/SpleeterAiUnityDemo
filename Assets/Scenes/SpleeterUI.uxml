@@ -19,7 +19,6 @@
             <!-- Control Section -->
             <engine:VisualElement class="control-section">
                 <engine:Label text="Controls" class="section-title" />
-                <engine:Button name="process-button" text="Process Audio" class="primary-button" />
                 <engine:Button name="stop-button" text="Stop Audio" class="secondary-button" />
             </engine:VisualElement>
 

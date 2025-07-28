@@ -5,12 +5,15 @@ using System.IO;
 
 public class SampleSceneControl : MonoBehaviour
 {
-    [Header("Audio Settings")] [SerializeField]
-    private string audioFileName = "audio_example.ogg";
+    [Header("Audio Settings")]
+    [SerializeField] private string audioFileName = "audio_example.ogg";
 
     [SerializeField] private bool saveSeparatedAudio = true;
     [SerializeField] private string outputFolder = "SeparatedAudio";
 
+    [SerializeField] private ModelAsset vocalsModelAsset;
+    [SerializeField] private ModelAsset accompanimentModelAsset;
+    
     private Model vocalsModel;
     private Model accompanimentModel;
     private Worker vocalsWorker;
@@ -53,32 +56,14 @@ public class SampleSceneControl : MonoBehaviour
         try
         {
             // Load vocals model
-            string vocalsModelPath = Path.Combine(Application.streamingAssetsPath, "vocals.onnx");
-            if (File.Exists(vocalsModelPath))
-            {
-                vocalsModel = ModelLoader.Load(vocalsModelPath);
-                vocalsWorker = new Worker(vocalsModel, BackendType.GPUCompute);
-                Debug.Log("Vocals model loaded successfully");
-            }
-            else
-            {
-                Debug.LogError($"Vocals model not found at: {vocalsModelPath}");
-                yield break;
-            }
+            vocalsModel = ModelLoader.Load(vocalsModelAsset);
+            vocalsWorker = new Worker(vocalsModel, BackendType.GPUCompute);
+            Debug.Log("Vocals model loaded successfully");
 
             // Load accompaniment model
-            string accompanimentModelPath = Path.Combine(Application.streamingAssetsPath, "accompaniment.onnx");
-            if (File.Exists(accompanimentModelPath))
-            {
-                accompanimentModel = ModelLoader.Load(accompanimentModelPath);
-                accompanimentWorker = new Worker(accompanimentModel, BackendType.GPUCompute);
-                Debug.Log("Accompaniment model loaded successfully");
-            }
-            else
-            {
-                Debug.LogError($"Accompaniment model not found at: {accompanimentModelPath}");
-                yield break;
-            }
+            accompanimentModel = ModelLoader.Load(accompanimentModelAsset);
+            accompanimentWorker = new Worker(accompanimentModel, BackendType.GPUCompute);
+            Debug.Log("Accompaniment model loaded successfully");
 
             modelsLoaded = true;
         }
@@ -87,6 +72,7 @@ public class SampleSceneControl : MonoBehaviour
             Debug.LogError($"Error loading models: {e.Message}");
             modelsLoaded = false;
         }
+        yield return null;
     }
 
     private IEnumerator SpleeterAudioSeparation(string audioFilePath)

@@ -16,7 +16,6 @@ public class SpleeterUIToolkit : MonoBehaviour
     // UI Elements
     private Label statusText;
     private ProgressBar progressBar;
-    private Button processButton;
     private Button stopButton;
     private Button playOriginalButton;
     private Button playVocalsButton;
@@ -56,7 +55,6 @@ public class SpleeterUIToolkit : MonoBehaviour
         // Get UI elements
         statusText = root.Q<Label>("status-text");
         progressBar = root.Q<ProgressBar>("progress-bar");
-        processButton = root.Q<Button>("process-button");
         stopButton = root.Q<Button>("stop-button");
         playOriginalButton = root.Q<Button>("play-original-button");
         playVocalsButton = root.Q<Button>("play-vocals-button");
@@ -66,11 +64,6 @@ public class SpleeterUIToolkit : MonoBehaviour
         saveFilesToggle = root.Q<Toggle>("save-files-toggle");
 
         // Setup button events
-        if (processButton != null)
-        {
-            processButton.clicked += OnProcessButtonClicked;
-        }
-
         if (stopButton != null)
         {
             stopButton.clicked += StopAllAudio;
@@ -152,11 +145,6 @@ public class SpleeterUIToolkit : MonoBehaviour
 
     private void UpdateButtonStates()
     {
-        if (processButton != null)
-        {
-            processButton.SetEnabled(!spleeterControl.IsProcessing());
-        }
-
         if (playOriginalButton != null)
         {
             playOriginalButton.SetEnabled(spleeterControl.GetOriginalAudioClip() != null &&
@@ -211,28 +199,6 @@ public class SpleeterUIToolkit : MonoBehaviour
         }
 
         infoText.text = info;
-    }
-
-    private void OnProcessButtonClicked()
-    {
-        if (!spleeterControl.IsProcessing())
-        {
-            // Update settings from UI
-            if (audioFileField != null)
-            {
-                // You could add a method to SampleSceneControl to update the audio file name
-                Debug.Log($"Processing audio file: {audioFileField.value}");
-            }
-
-            if (saveFilesToggle != null)
-            {
-                // You could add a method to SampleSceneControl to update the save setting
-                Debug.Log($"Save files: {saveFilesToggle.value}");
-            }
-
-            // Restart the process
-            spleeterControl.StartCoroutine(spleeterControl.InitializeSpleeter());
-        }
     }
 
     private void PlayAudio(AudioClip audioClip, AudioSource audioSource)
