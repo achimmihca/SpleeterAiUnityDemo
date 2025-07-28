@@ -5,20 +5,21 @@ using System.IO;
 
 public class SampleSceneControl : MonoBehaviour
 {
-    [Header("Audio Settings")]
-    [SerializeField] private string audioFileName = "audio_example.ogg";
+    [Header("Audio Settings")] [SerializeField]
+    private string audioFileName = "audio_example.ogg";
+
     [SerializeField] private bool saveSeparatedAudio = true;
     [SerializeField] private string outputFolder = "SeparatedAudio";
-    
+
     private Model vocalsModel;
     private Model accompanimentModel;
     private Worker vocalsWorker;
     private Worker accompanimentWorker;
-    
+
     private AudioClip originalAudioClip;
     private AudioClip vocalsAudioClip;
     private AudioClip accompanimentAudioClip;
-    
+
     private bool isProcessing;
     private bool modelsLoaded;
 
@@ -31,10 +32,10 @@ public class SampleSceneControl : MonoBehaviour
     public IEnumerator InitializeSpleeter()
     {
         Debug.Log("Initializing Spleeter models...");
-        
+
         // Load ONNX models
         yield return LoadModels();
-        
+
         if (modelsLoaded)
         {
             Debug.Log("Models loaded successfully. Starting audio separation...");
@@ -101,7 +102,7 @@ public class SampleSceneControl : MonoBehaviour
 
         // Load audio file
         yield return LoadAudioFile(audioFilePath);
-        
+
         if (originalAudioClip == null)
         {
             Debug.LogError("Failed to load audio file!");
@@ -109,15 +110,15 @@ public class SampleSceneControl : MonoBehaviour
             yield break;
         }
 
-                    // Convert audio to tensor
-            Tensor<float> audioTensor = ConvertAudioToTensor(originalAudioClip);
-        
+        // Convert audio to tensor
+        Tensor<float> audioTensor = ConvertAudioToTensor(originalAudioClip);
+
         // Process with both models
         yield return ProcessAudioWithModels(audioTensor);
-        
+
         // Convert results back to AudioClips
         yield return ConvertResultsToAudioClips();
-        
+
         // Save separated audio files if requested
         if (saveSeparatedAudio)
         {
@@ -138,14 +139,16 @@ public class SampleSceneControl : MonoBehaviour
 
         // Load audio file using Unity's WWW (for older Unity versions) or UnityWebRequest
         string url = "file://" + filePath;
-        using (UnityEngine.Networking.UnityWebRequest www = UnityEngine.Networking.UnityWebRequestMultimedia.GetAudioClip(url, AudioType.OGGVORBIS))
+        using (UnityEngine.Networking.UnityWebRequest www =
+               UnityEngine.Networking.UnityWebRequestMultimedia.GetAudioClip(url, AudioType.OGGVORBIS))
         {
             yield return www.SendWebRequest();
 
             if (www.result == UnityEngine.Networking.UnityWebRequest.Result.Success)
             {
                 originalAudioClip = UnityEngine.Networking.DownloadHandlerAudioClip.GetContent(www);
-                Debug.Log($"Audio loaded successfully: {originalAudioClip.name}, Length: {originalAudioClip.length}s, Channels: {originalAudioClip.channels}, Frequency: {originalAudioClip.frequency}");
+                Debug.Log(
+                    $"Audio loaded successfully: {originalAudioClip.name}, Length: {originalAudioClip.length}s, Channels: {originalAudioClip.channels}, Frequency: {originalAudioClip.frequency}");
             }
             else
             {
@@ -163,10 +166,10 @@ public class SampleSceneControl : MonoBehaviour
         // Reshape data for model input (assuming mono or stereo)
         int samples = audioClip.samples;
         int channels = audioClip.channels;
-        
+
         // Create tensor with shape [1, channels, samples] for ONNX model
         Tensor<float> tensor = new Tensor<float>(new TensorShape(1, channels, samples));
-        
+
         // Copy audio data to tensor
         for (int i = 0; i < samples; i++)
         {
@@ -176,7 +179,7 @@ public class SampleSceneControl : MonoBehaviour
                 tensor[0, c, i] = audioData[audioIndex];
             }
         }
-        
+
         Debug.Log($"Converted audio to tensor: {tensor.shape}");
         return tensor;
     }
@@ -210,20 +213,23 @@ public class SampleSceneControl : MonoBehaviour
         {
             vocalsData[i] = vocalsTensor[i];
         }
+
         for (int i = 0; i < accompanimentTensor.count; i++)
         {
             accompanimentData[i] = accompanimentTensor[i];
         }
 
         // Create AudioClips from the separated data
-        vocalsAudioClip = AudioClip.Create("Vocals", originalAudioClip.samples, originalAudioClip.channels, originalAudioClip.frequency, false);
+        vocalsAudioClip = AudioClip.Create("Vocals", originalAudioClip.samples, originalAudioClip.channels,
+            originalAudioClip.frequency, false);
         vocalsAudioClip.SetData(vocalsData, 0);
-        
-        accompanimentAudioClip = AudioClip.Create("Accompaniment", originalAudioClip.samples, originalAudioClip.channels, originalAudioClip.frequency, false);
+
+        accompanimentAudioClip = AudioClip.Create("Accompaniment", originalAudioClip.samples,
+            originalAudioClip.channels, originalAudioClip.frequency, false);
         accompanimentAudioClip.SetData(accompanimentData, 0);
 
         Debug.Log("Converted tensors to AudioClips");
-        
+
         yield return null;
     }
 
@@ -237,7 +243,7 @@ public class SampleSceneControl : MonoBehaviour
     private IEnumerator SaveSeparatedAudioFiles()
     {
         Debug.Log("Saving separated audio files...");
-        
+
         // Create output directory
         string outputPath = Path.Combine(Application.persistentDataPath, outputFolder);
         if (!Directory.Exists(outputPath))
@@ -247,10 +253,10 @@ public class SampleSceneControl : MonoBehaviour
 
         // Save vocals
         yield return SaveAudioClipToFile(vocalsAudioClip, Path.Combine(outputPath, "vocals.wav"));
-        
+
         // Save accompaniment
         yield return SaveAudioClipToFile(accompanimentAudioClip, Path.Combine(outputPath, "accompaniment.wav"));
-        
+
         Debug.Log($"Separated audio files saved to: {outputPath}");
     }
 
@@ -258,7 +264,7 @@ public class SampleSceneControl : MonoBehaviour
     {
         // Convert AudioClip to WAV format
         byte[] wavData = ConvertAudioClipToWAV(audioClip);
-        
+
         try
         {
             File.WriteAllBytes(filePath, wavData);
@@ -268,7 +274,7 @@ public class SampleSceneControl : MonoBehaviour
         {
             Debug.LogError($"Failed to save audio file {filePath}: {e.Message}");
         }
-        
+
         yield return null;
     }
 
@@ -277,32 +283,45 @@ public class SampleSceneControl : MonoBehaviour
         // Simple WAV conversion
         float[] samples = new float[audioClip.samples * audioClip.channels];
         audioClip.GetData(samples, 0);
-        
+
         // Convert to 16-bit PCM
         byte[] wavData = new byte[44 + samples.Length * 2]; // 44 bytes header + 2 bytes per sample
-        
+
         // WAV header
         int pos = 0;
-        
+
         // RIFF header
-        System.Text.Encoding.ASCII.GetBytes("RIFF").CopyTo(wavData, pos); pos += 4;
-        System.BitConverter.GetBytes(wavData.Length - 8).CopyTo(wavData, pos); pos += 4;
-        System.Text.Encoding.ASCII.GetBytes("WAVE").CopyTo(wavData, pos); pos += 4;
-        
+        System.Text.Encoding.ASCII.GetBytes("RIFF").CopyTo(wavData, pos);
+        pos += 4;
+        System.BitConverter.GetBytes(wavData.Length - 8).CopyTo(wavData, pos);
+        pos += 4;
+        System.Text.Encoding.ASCII.GetBytes("WAVE").CopyTo(wavData, pos);
+        pos += 4;
+
         // fmt chunk
-        System.Text.Encoding.ASCII.GetBytes("fmt ").CopyTo(wavData, pos); pos += 4;
-        System.BitConverter.GetBytes(16).CopyTo(wavData, pos); pos += 4; // fmt chunk size
-        System.BitConverter.GetBytes((short)1).CopyTo(wavData, pos); pos += 2; // PCM format
-        System.BitConverter.GetBytes((short)audioClip.channels).CopyTo(wavData, pos); pos += 2;
-        System.BitConverter.GetBytes(audioClip.frequency).CopyTo(wavData, pos); pos += 4;
-        System.BitConverter.GetBytes(audioClip.frequency * audioClip.channels * 2).CopyTo(wavData, pos); pos += 4; // byte rate
-        System.BitConverter.GetBytes((short)(audioClip.channels * 2)).CopyTo(wavData, pos); pos += 2; // block align
-        System.BitConverter.GetBytes((short)16).CopyTo(wavData, pos); pos += 2; // bits per sample
-        
+        System.Text.Encoding.ASCII.GetBytes("fmt ").CopyTo(wavData, pos);
+        pos += 4;
+        System.BitConverter.GetBytes(16).CopyTo(wavData, pos);
+        pos += 4; // fmt chunk size
+        System.BitConverter.GetBytes((short)1).CopyTo(wavData, pos);
+        pos += 2; // PCM format
+        System.BitConverter.GetBytes((short)audioClip.channels).CopyTo(wavData, pos);
+        pos += 2;
+        System.BitConverter.GetBytes(audioClip.frequency).CopyTo(wavData, pos);
+        pos += 4;
+        System.BitConverter.GetBytes(audioClip.frequency * audioClip.channels * 2).CopyTo(wavData, pos);
+        pos += 4; // byte rate
+        System.BitConverter.GetBytes((short)(audioClip.channels * 2)).CopyTo(wavData, pos);
+        pos += 2; // block align
+        System.BitConverter.GetBytes((short)16).CopyTo(wavData, pos);
+        pos += 2; // bits per sample
+
         // data chunk
-        System.Text.Encoding.ASCII.GetBytes("data").CopyTo(wavData, pos); pos += 4;
-        System.BitConverter.GetBytes(samples.Length * 2).CopyTo(wavData, pos); pos += 4;
-        
+        System.Text.Encoding.ASCII.GetBytes("data").CopyTo(wavData, pos);
+        pos += 4;
+        System.BitConverter.GetBytes(samples.Length * 2).CopyTo(wavData, pos);
+        pos += 4;
+
         // Convert float samples to 16-bit PCM
         for (int i = 0; i < samples.Length; i++)
         {
@@ -310,7 +329,7 @@ public class SampleSceneControl : MonoBehaviour
             System.BitConverter.GetBytes(sample).CopyTo(wavData, pos);
             pos += 2;
         }
-        
+
         return wavData;
     }
 
@@ -322,19 +341,19 @@ public class SampleSceneControl : MonoBehaviour
             vocalsWorker.Dispose();
             vocalsWorker = null;
         }
-        
+
         if (accompanimentWorker != null)
         {
             accompanimentWorker.Dispose();
             accompanimentWorker = null;
         }
-        
+
         if (vocalsModel != null)
         {
             // Model doesn't need explicit disposal in newer Unity Sentis versions
             vocalsModel = null;
         }
-        
+
         if (accompanimentModel != null)
         {
             // Model doesn't need explicit disposal in newer Unity Sentis versions

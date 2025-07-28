@@ -4,14 +4,15 @@ using System.Collections;
 
 public class SpleeterUIToolkit : MonoBehaviour
 {
-    [Header("UI References")]
-    [SerializeField] private UIDocument uiDocument;
-    
-    [Header("Audio Sources")]
-    [SerializeField] private AudioSource originalAudioSource;
+    [Header("UI References")] [SerializeField]
+    private UIDocument uiDocument;
+
+    [Header("Audio Sources")] [SerializeField]
+    private AudioSource originalAudioSource;
+
     [SerializeField] private AudioSource vocalsAudioSource;
     [SerializeField] private AudioSource accompanimentAudioSource;
-    
+
     // UI Elements
     private Label statusText;
     private ProgressBar progressBar;
@@ -23,7 +24,7 @@ public class SpleeterUIToolkit : MonoBehaviour
     private Label infoText;
     private TextField audioFileField;
     private Toggle saveFilesToggle;
-    
+
     private SampleSceneControl spleeterControl;
     private bool isPlaying = false;
     private AudioSource currentPlayingSource;
@@ -51,7 +52,7 @@ public class SpleeterUIToolkit : MonoBehaviour
         }
 
         var root = uiDocument.rootVisualElement;
-        
+
         // Get UI elements
         statusText = root.Q<Label>("status-text");
         progressBar = root.Q<ProgressBar>("progress-bar");
@@ -87,7 +88,8 @@ public class SpleeterUIToolkit : MonoBehaviour
 
         if (playAccompanimentButton != null)
         {
-            playAccompanimentButton.clicked += () => PlayAudio(spleeterControl.GetAccompanimentAudioClip(), accompanimentAudioSource);
+            playAccompanimentButton.clicked += () =>
+                PlayAudio(spleeterControl.GetAccompanimentAudioClip(), accompanimentAudioSource);
         }
 
         // Setup settings
@@ -117,7 +119,7 @@ public class SpleeterUIToolkit : MonoBehaviour
         if (statusText == null) return;
 
         string status = "";
-        
+
         if (spleeterControl.IsProcessing())
         {
             status = "Processing audio separation...";
@@ -157,17 +159,20 @@ public class SpleeterUIToolkit : MonoBehaviour
 
         if (playOriginalButton != null)
         {
-            playOriginalButton.SetEnabled(spleeterControl.GetOriginalAudioClip() != null && !spleeterControl.IsProcessing());
+            playOriginalButton.SetEnabled(spleeterControl.GetOriginalAudioClip() != null &&
+                                          !spleeterControl.IsProcessing());
         }
 
         if (playVocalsButton != null)
         {
-            playVocalsButton.SetEnabled(spleeterControl.GetVocalsAudioClip() != null && !spleeterControl.IsProcessing());
+            playVocalsButton.SetEnabled(spleeterControl.GetVocalsAudioClip() != null &&
+                                        !spleeterControl.IsProcessing());
         }
 
         if (playAccompanimentButton != null)
         {
-            playAccompanimentButton.SetEnabled(spleeterControl.GetAccompanimentAudioClip() != null && !spleeterControl.IsProcessing());
+            playAccompanimentButton.SetEnabled(spleeterControl.GetAccompanimentAudioClip() != null &&
+                                               !spleeterControl.IsProcessing());
         }
 
         if (stopButton != null)
@@ -189,10 +194,12 @@ public class SpleeterUIToolkit : MonoBehaviour
         {
             info += $"Original: {original.length:F1}s\n";
         }
+
         if (vocals != null)
         {
             info += $"Vocals: {vocals.length:F1}s\n";
         }
+
         if (accompaniment != null)
         {
             info += $"Accompaniment: {accompaniment.length:F1}s";
@@ -246,7 +253,7 @@ public class SpleeterUIToolkit : MonoBehaviour
             audioSource.Play();
             currentPlayingSource = audioSource;
             isPlaying = true;
-            
+
             Debug.Log($"Playing: {audioClip.name}");
         }
     }
@@ -256,7 +263,7 @@ public class SpleeterUIToolkit : MonoBehaviour
         if (originalAudioSource != null) originalAudioSource.Stop();
         if (vocalsAudioSource != null) vocalsAudioSource.Stop();
         if (accompanimentAudioSource != null) accompanimentAudioSource.Stop();
-        
+
         currentPlayingSource = null;
         isPlaying = false;
     }
@@ -277,4 +284,4 @@ public class SpleeterUIToolkit : MonoBehaviour
     {
         StopAllAudio();
     }
-} 
+}

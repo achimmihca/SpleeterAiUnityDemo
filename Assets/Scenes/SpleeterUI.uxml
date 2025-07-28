@@ -8,21 +8,21 @@
     <engine:ScrollView name="spleeter-scrollview" class="spleeter-scrollview">
         <engine:VisualElement name="spleeter-ui" class="spleeter-container">
             <engine:Label text="Spleeter AI Audio Separation" class="title" />
-            
+
             <!-- Status Section -->
             <engine:VisualElement class="status-section">
                 <engine:Label text="Status" class="section-title" />
                 <engine:Label name="status-text" text="Initializing..." class="status-text" />
                 <engine:ProgressBar name="progress-bar" class="progress-bar" />
             </engine:VisualElement>
-            
+
             <!-- Control Section -->
             <engine:VisualElement class="control-section">
                 <engine:Label text="Controls" class="section-title" />
                 <engine:Button name="process-button" text="Process Audio" class="primary-button" />
                 <engine:Button name="stop-button" text="Stop Audio" class="secondary-button" />
             </engine:VisualElement>
-            
+
             <!-- Audio Playback Section -->
             <engine:VisualElement class="playback-section">
                 <engine:Label text="Audio Playback" class="section-title" />
@@ -32,13 +32,13 @@
                     <engine:Button name="play-accompaniment-button" text="Play Accompaniment" class="audio-button" />
                 </engine:VisualElement>
             </engine:VisualElement>
-            
+
             <!-- Info Section -->
             <engine:VisualElement class="info-section">
                 <engine:Label text="Audio Information" class="section-title" />
                 <engine:Label name="info-text" text="No audio loaded" class="info-text" />
             </engine:VisualElement>
-            
+
             <!-- Settings Section -->
             <engine:VisualElement class="settings-section">
                 <engine:Label text="Settings" class="section-title" />
@@ -54,4 +54,4 @@
         </engine:VisualElement>
     </engine:ScrollView>
 
-</engine:UXML> 
+</engine:UXML>
