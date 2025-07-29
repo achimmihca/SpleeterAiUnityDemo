@@ -1,12 +1,16 @@
+using System;
 using UnityEngine;
 using Unity.Sentis;
 using System.Collections;
+using System.Collections.Generic;
 using System.IO;
+using NWaves.Signals;
+using NWaves.Transforms;
 
 public class SampleSceneControl : MonoBehaviour
 {
     [Header("Audio Settings")]
-    [SerializeField] private string audioFileName = "audio_example.ogg";
+    [SerializeField] private string audioFileName = "audio_example_long.ogg";
 
     [SerializeField] private bool saveSeparatedAudio = true;
     [SerializeField] private string outputFolder = "SeparatedAudio";
@@ -67,7 +71,7 @@ public class SampleSceneControl : MonoBehaviour
 
             modelsLoaded = true;
         }
-        catch (System.Exception e)
+        catch (Exception e)
         {
             Debug.LogError($"Error loading models: {e.Message}");
             modelsLoaded = false;
@@ -84,9 +88,8 @@ public class SampleSceneControl : MonoBehaviour
         }
 
         isProcessing = true;
-        Debug.Log($"Starting audio separation for: {audioFilePath}");
 
-        // Load audio file
+        // Load audio clip
         yield return LoadAudioFile(audioFilePath);
 
         if (originalAudioClip == null)
@@ -96,20 +99,149 @@ public class SampleSceneControl : MonoBehaviour
             yield break;
         }
 
-        // Convert audio to tensor
-        Tensor<float> audioTensor = ConvertAudioToTensor(originalAudioClip);
+        Debug.Log("Converting to mono for STFT processing...");
 
-        // Process with both models
-        yield return ProcessAudioWithModels(audioTensor);
+        // Extract mono samples
+        float[] audioData = new float[originalAudioClip.samples * originalAudioClip.channels];
+        originalAudioClip.GetData(audioData, 0);
+        float[] monoSamples = new float[originalAudioClip.samples];
 
-        // Save separated audio files if requested
-        if (saveSeparatedAudio)
+        for (int i = 0; i < originalAudioClip.samples; i++)
         {
-            yield return SaveSeparatedAudioFiles();
+            float sum = 0f;
+            for (int c = 0; c < originalAudioClip.channels; c++)
+            {
+                sum += audioData[i * originalAudioClip.channels + c];
+            }
+            monoSamples[i] = sum / originalAudioClip.channels;
         }
 
-        Debug.Log("Audio separation completed successfully!");
+        int sampleRate = originalAudioClip.frequency;
+
+        var stft = new Stft(1024, 256, NWaves.Windows.WindowType.Hann);
+
+        Debug.Log("Processing signal in overlapping chunks...");
+
+        List<float> vocalsCombined = new List<float>();
+        List<float> accompCombined = new List<float>();
+
+        int windowFrames = 1024;
+        int hopSize = 512;
+
+        int totalFrames = (int)Mathf.Floor(monoSamples.Length / (float)hopSize) - 2;
+        int chunkCount = (int)Mathf.Floor(totalFrames / (float)windowFrames) + 1;
+        if (chunkCount <= 0)
+        {
+            Debug.LogError("Not enough data to process in chunks.");
+            isProcessing = false;
+            yield break;
+        }
+        
+        Debug.Log($"Samples: {monoSamples.Length}, HopSize: {hopSize}, WindowFrames: {windowFrames}, TotalFrames: {totalFrames}, ChunkCount: {chunkCount}");
+
+        for (int chunk = 0; chunk < chunkCount; chunk++)
+        {
+            int startSample = chunk * hopSize * windowFrames;
+            int length = 1024 * 256;  // 1024 frames × 256 hop = 262,144 samples
+            if (startSample + length > monoSamples.Length)
+                break;
+
+            float[] chunkSamples = new float[length];
+            Array.Copy(monoSamples, startSample, chunkSamples, 0, length);
+            var chunkSignal = new DiscreteSignal(sampleRate, chunkSamples);
+
+            var magPhase = stft.MagnitudePhaseSpectrogram(chunkSignal);
+
+            if (magPhase.Magnitudes.Count != 1024 || magPhase.Magnitudes[0].Length != 512)
+            {
+                Debug.LogWarning($"Invalid shape: {magPhase.Magnitudes.Count} x {magPhase.Magnitudes[0].Length}");
+                continue;
+            }
+
+            // === Prepare Input Tensor ===
+            var inputTensor = new Tensor<float>(new TensorShape(2, 1, 512, 1024));
+            for (int t = 0; t < 1024; t++)
+            {
+                for (int f = 0; f < 512; f++)
+                {
+                    inputTensor[0, 0, f, t] = magPhase.Magnitudes[t][f];
+                    inputTensor[1, 0, f, t] = magPhase.Phases[t][f];
+                }
+            }
+
+            // === Run Spleeter model ===
+            yield return vocalsWorker.ScheduleIterable(inputTensor);
+            var vocalsOut = vocalsWorker.PeekOutput() as Tensor<float>;
+
+            yield return accompanimentWorker.ScheduleIterable(inputTensor);
+            var accompOut = accompanimentWorker.PeekOutput() as Tensor<float>;
+
+            // === Reconstruct waveform ===
+            Debug.Log($"[Chunk {chunk}] ModelOutput shape: {vocalsOut.shape}, Phase frames: {magPhase.Phases.Count}");
+            float[] vocalsSegment = ReconstructWithOriginalPhase(vocalsOut, magPhase.Phases, stft);
+            float[] accompSegment = ReconstructWithOriginalPhase(accompOut, magPhase.Phases, stft);
+            
+            vocalsCombined.AddRange(vocalsSegment);
+            accompCombined.AddRange(accompSegment);
+
+            inputTensor.Dispose();
+            vocalsOut.Dispose();
+            accompOut.Dispose();
+        }
+
+        // === Finalize ===
+        if (vocalsCombined.Count == 0)
+        {
+            Debug.LogError("No vocals audio data was reconstructed for vocals.");
+            yield break;
+        }
+        if (accompCombined.Count == 0)
+        {
+            Debug.LogError("No instrumental audio data was reconstructed for vocals.");
+            yield break;
+        }
+        
+        vocalsAudioClip = AudioClip.Create("Vocals", vocalsCombined.Count, 1, sampleRate, false);
+        vocalsAudioClip.SetData(vocalsCombined.ToArray(), 0);
+        
+        accompanimentAudioClip = AudioClip.Create("Accompaniment", accompCombined.Count, 1, sampleRate, false);
+        accompanimentAudioClip.SetData(accompCombined.ToArray(), 0);
+
+        if (saveSeparatedAudio)
+            yield return SaveSeparatedAudioFiles();
+
+        Debug.Log("Spleeter chunked processing finished.");
         isProcessing = false;
+    }
+
+    private float[] ReconstructWithOriginalPhase(Tensor<float> modelOutput, List<float[]> originalPhases, NWaves.Transforms.Stft stft)
+    {
+        if (originalPhases.Count != modelOutput.shape[3])
+        {
+            Debug.LogError($"Mismatch: originalPhases.Count = {originalPhases.Count}, modelOutput.shape[3] = {modelOutput.shape[3]}");
+            return new float[0];
+        }
+        
+        int timeFrames = modelOutput.shape[3];
+        int freqBins = modelOutput.shape[2];
+
+        var magnitudePhaseList = new MagnitudePhaseList
+        {
+            Magnitudes = new List<float[]>(timeFrames),
+            Phases = originalPhases  // reuse original phase from input
+        };
+
+        for (int t = 0; t < timeFrames; t++)
+        {
+            float[] magFrame = new float[freqBins];
+            for (int f = 0; f < freqBins; f++)
+            {
+                magFrame[f] = modelOutput[0, 0, f, t]; // only 1 channel
+            }
+            magnitudePhaseList.Magnitudes.Add(magFrame);
+        }
+
+        return stft.ReconstructMagnitudePhase(magnitudePhaseList);
     }
 
     private IEnumerator LoadAudioFile(string filePath)
@@ -138,82 +270,6 @@ public class SampleSceneControl : MonoBehaviour
                 Debug.LogError($"Failed to load audio file: {www.error}");
             }
         }
-    }
-
-    private Tensor<float> ConvertAudioToTensor(AudioClip audioClip)
-    {
-        // Get audio data
-        float[] audioData = new float[audioClip.samples * audioClip.channels];
-        audioClip.GetData(audioData, 0);
-
-        // Reshape data for model input (assuming mono or stereo)
-        int samples = audioClip.samples;
-        int channels = audioClip.channels;
-
-        // Create tensor with shape [1, channels, samples] for ONNX model
-        Tensor<float> tensor = new Tensor<float>(new TensorShape(1, channels, samples));
-
-        // Copy audio data to tensor
-        for (int i = 0; i < samples; i++)
-        {
-            for (int c = 0; c < channels; c++)
-            {
-                int audioIndex = i * channels + c;
-                tensor[0, c, i] = audioData[audioIndex];
-            }
-        }
-
-        Debug.Log($"Converted audio to tensor: {tensor.shape}");
-        return tensor;
-    }
-
-    private IEnumerator ProcessAudioWithModels(Tensor<float> audioTensor)
-    {
-        Debug.Log("Processing audio with Spleeter models...");
-
-        // Process with vocals model
-        yield return vocalsWorker.ScheduleIterable(audioTensor);
-        using Tensor<float> vocalsOutput = vocalsWorker.PeekOutput() as Tensor<float>;
-        Debug.Log($"Vocals model output shape: {vocalsOutput.shape}");
-
-        // Process with accompaniment model
-        yield return accompanimentWorker.ScheduleIterable(audioTensor);
-        using Tensor<float> accompanimentOutput = accompanimentWorker.PeekOutput() as Tensor<float>;
-        Debug.Log($"Accompaniment model output shape: {accompanimentOutput.shape}");
-
-        // Store results for later conversion
-        yield return ConvertTensorToAudioData(vocalsOutput, accompanimentOutput);
-    }
-
-    private IEnumerator ConvertTensorToAudioData(Tensor<float> vocalsTensor, Tensor<float> accompanimentTensor)
-    {
-        // Convert tensors back to audio data
-        float[] vocalsData = new float[vocalsTensor.count];
-        float[] accompanimentData = new float[accompanimentTensor.count];
-
-        // Copy tensor data to arrays
-        for (int i = 0; i < vocalsTensor.count; i++)
-        {
-            vocalsData[i] = vocalsTensor[i];
-        }
-
-        for (int i = 0; i < accompanimentTensor.count; i++)
-        {
-            accompanimentData[i] = accompanimentTensor[i];
-        }
-
-        // Create AudioClips from the separated data
-        vocalsAudioClip = AudioClip.Create("Vocals", originalAudioClip.samples, originalAudioClip.channels,
-            originalAudioClip.frequency, false);
-        vocalsAudioClip.SetData(vocalsData, 0);
-
-        accompanimentAudioClip = AudioClip.Create("Accompaniment", originalAudioClip.samples,
-            originalAudioClip.channels, originalAudioClip.frequency, false);
-        accompanimentAudioClip.SetData(accompanimentData, 0);
-
-        Debug.Log("Converted tensors to AudioClips");
-
-        yield return null;
     }
 
     private IEnumerator SaveSeparatedAudioFiles()
