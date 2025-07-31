@@ -6,17 +6,16 @@ using System.Collections.Generic;
 using System.IO;
 using NWaves.Signals;
 using NWaves.Transforms;
+using NWaves.Windows;
 
 public class SampleSceneControl : MonoBehaviour
 {
-    [Header("Audio Settings")]
-    [SerializeField] private string audioFileName = "audio_example_long.ogg";
+    public ModelAsset vocalsModelAsset;
+    public ModelAsset accompanimentModelAsset;
 
-    [SerializeField] private bool saveSeparatedAudio = true;
-    [SerializeField] private string outputFolder = "SeparatedAudio";
-
-    [SerializeField] private ModelAsset vocalsModelAsset;
-    [SerializeField] private ModelAsset accompanimentModelAsset;
+    private string audioFileName = "audio_example_long.ogg";
+    private string outputFolder = "SeparatedAudio";
+    private bool saveSeparatedAudio = true;
     
     private Model vocalsModel;
     private Model accompanimentModel;
@@ -101,6 +100,8 @@ public class SampleSceneControl : MonoBehaviour
 
         Debug.Log("Converting to mono for STFT processing...");
 
+        int sampleRate = originalAudioClip.frequency;
+        
         // Extract mono samples
         float[] audioData = new float[originalAudioClip.samples * originalAudioClip.channels];
         originalAudioClip.GetData(audioData, 0);
@@ -115,18 +116,16 @@ public class SampleSceneControl : MonoBehaviour
             }
             monoSamples[i] = sum / originalAudioClip.channels;
         }
-
-        int sampleRate = originalAudioClip.frequency;
-
-        var stft = new Stft(1024, 256, NWaves.Windows.WindowType.Hann);
-
+        // WavFileWriter.WriteFile(Path.Combine(Application.persistentDataPath, outputFolder, "mono.wav"), sampleRate, 1, monoSamples);
+        
         Debug.Log("Processing signal in overlapping chunks...");
-
+        
+        int windowFrames = 1024;
+        int hopSize = 256;
+        var stft = new Stft(windowSize: windowFrames, hopSize: hopSize, window: WindowType.Hann);
+        
         List<float> vocalsCombined = new List<float>();
         List<float> accompCombined = new List<float>();
-
-        int windowFrames = 1024;
-        int hopSize = 512;
 
         int totalFrames = (int)Mathf.Floor(monoSamples.Length / (float)hopSize) - 2;
         int chunkCount = (int)Mathf.Floor(totalFrames / (float)windowFrames) + 1;
@@ -139,23 +138,22 @@ public class SampleSceneControl : MonoBehaviour
         
         Debug.Log($"Samples: {monoSamples.Length}, HopSize: {hopSize}, WindowFrames: {windowFrames}, TotalFrames: {totalFrames}, ChunkCount: {chunkCount}");
 
-        for (int chunk = 0; chunk < chunkCount; chunk++)
+        for (int chunk = 0; chunk < 1 /* TODO: chunkCount */; chunk++)
         {
-            int startSample = chunk * hopSize * windowFrames;
-            int length = 1024 * 256;  // 1024 frames × 256 hop = 262,144 samples
-            if (startSample + length > monoSamples.Length)
+            long samplesPerChunk = (windowFrames - 1) * hopSize + windowFrames;
+            long startSample = chunk * samplesPerChunk;
+            if (startSample + samplesPerChunk > monoSamples.Length)
                 break;
 
-            float[] chunkSamples = new float[length];
-            Array.Copy(monoSamples, startSample, chunkSamples, 0, length);
+            float[] chunkSamples = new float[samplesPerChunk];
+            Array.Copy(monoSamples, startSample, chunkSamples, 0, samplesPerChunk);
             var chunkSignal = new DiscreteSignal(sampleRate, chunkSamples);
 
             var magPhase = stft.MagnitudePhaseSpectrogram(chunkSignal);
-
             if (magPhase.Magnitudes.Count != 1024 || magPhase.Magnitudes[0].Length != 512)
             {
-                Debug.LogWarning($"Invalid shape: {magPhase.Magnitudes.Count} x {magPhase.Magnitudes[0].Length}");
-                continue;
+                Debug.LogWarning($"Invalid shape. chunk: {chunk}, {magPhase.Magnitudes.Count} x {magPhase.Magnitudes[0].Length}");
+                // continue;
             }
 
             // === Prepare Input Tensor ===
