@@ -111,8 +111,7 @@ public class SpleeterUIToolkit : MonoBehaviour
     {
         if (statusText == null) return;
 
-        string status = "";
-
+        string status;
         if (spleeterControl.IsProcessing())
         {
             status = "Processing audio separation...";
@@ -123,17 +122,9 @@ public class SpleeterUIToolkit : MonoBehaviour
                 progressBar.value = Mathf.PingPong(Time.time * 0.5f, 1f);
             }
         }
-        else if (spleeterControl.AreModelsLoaded())
-        {
-            status = "Ready for audio separation";
-            if (progressBar != null)
-            {
-                progressBar.visible = false;
-            }
-        }
         else
         {
-            status = "Loading models...";
+            status = "Ready for audio separation";
             if (progressBar != null)
             {
                 progressBar.visible = false;
