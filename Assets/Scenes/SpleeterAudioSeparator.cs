@@ -3,43 +3,71 @@ using UnityEngine;
 using Unity.Sentis;
 using System.Collections;
 using System.Collections.Generic;
-using System.Linq;
-using NWaves.Signals;
 using NWaves.Transforms;
 using NWaves.Windows;
 
+/**
+ * Isolates vocals and instrumental parts from audio via Spleeter model.
+ * Implementation is based on
+ * https://github.com/k2-fsa/sherpa-onnx/blob/master/scripts/spleeter/separate_onnx.py (Apache 2.0 License).
+ */
 public class SpleeterAudioSeparator : IDisposable
 {
-    // Expected input tensor shape is [2, 'num_splits', 512, 1024] (provided by python).
+    // Spleeter model configuration
+    // Expected input tensor shape of the ONNX model is [2, 'num_splits', 512, 1024].
     // This corresponds to (BatchSize, 'num_splits', TimeFrameCount, FrequencyBinCount).
-    // This leads to required parameters for the STFT: windowSize = 2048, hopSize = 512.
-    // Further, the model expects mono audio with 44100 Hz sample rate.
     private const int BatchSize = 2;
     private const int TimeFrameCount = 512;
     private const int FrequencyBinCount = 1024;
 
+    const float Epsilon = 1e-10f;
+    
+    // STFT Config
     private const int ModelSampleRate = 44100;
-    private const int FftWindowSize = 2048;
-    private const int FftHopSize = 512;
+    private const int FftWindowSize = 4096;
+    private const int FftSize = FftWindowSize;
+    private const int FftHopSize = 1024;
+    private readonly WindowType fftWindowType = WindowType.Hann;
 
-    private readonly ModelAsset modelAsset;
-    private Model model;
-    private Worker worker;
+    /**
+     * ----------inputs for ./2stems/vocals.onnx----------
+     * NodeArg(name='x', type='tensor(float)', shape=[2, 'num_splits', 512, 1024])
+     * ----------outputs for ./2stems/vocals.onnx----------
+     * NodeArg(name='y', type='tensor(float)', shape=[2, 'Transposey_dim_1', 512, 1024])
+     *
+     * ----------inputs for ./2stems/accompaniment.onnx----------
+     * NodeArg(name='x', type='tensor(float)', shape=[2, 'num_splits', 512, 1024])
+     * ----------outputs for ./2stems/accompaniment.onnx----------
+     * NodeArg(name='y', type='tensor(float)', shape=[2, 'Transposey_dim_1', 512, 1024])
+     */
+    private readonly ModelAsset vocalsModelAsset;
+    private readonly ModelAsset accompanimentModelAsset;
+    private readonly BackendType backendType;
 
+    private Model vocalsModel;
+    private Worker vocalsWorker;
+
+    private Model accompanimentModel;
+    private Worker accompanimentWorker;
+    
     public bool IsProcessing { get; private set; }
     public Result LastResult { get; private set; }
 
-    public SpleeterAudioSeparator(ModelAsset modelAsset)
+    public SpleeterAudioSeparator(ModelAsset vocalsModelAsset, ModelAsset accompanimentModelAsset, BackendType backendType = BackendType.CPU)
     {
-        this.modelAsset = modelAsset;
+        this.vocalsModelAsset = vocalsModelAsset;
+        this.accompanimentModelAsset = accompanimentModelAsset;
     }
 
-    public void LoadModel()
+    public void LoadModels()
     {
         try
         {
-            model = ModelLoader.Load(modelAsset);
-            worker = new Worker(model, BackendType.GPUCompute);
+            vocalsModel = ModelLoader.Load(vocalsModelAsset);
+            vocalsWorker = new Worker(vocalsModel, backendType);
+            
+            accompanimentModel = ModelLoader.Load(accompanimentModelAsset);
+            accompanimentWorker = new Worker(accompanimentModel, backendType);
         }
         catch (Exception e)
         {
@@ -59,7 +87,7 @@ public class SpleeterAudioSeparator : IDisposable
 
     public IEnumerator Process(float[] samples, int sampleRate, int channels)
     {
-        if (model == null)
+        if (vocalsModel == null)
         {
             throw new InvalidOperationException("Model not loaded yet");
         }
@@ -83,176 +111,245 @@ public class SpleeterAudioSeparator : IDisposable
 
     private IEnumerator ProcessInternal(float[] samples, int sampleRate, int channels)
     {
-        if (sampleRate != ModelSampleRate)
+        // De-interleave stereo audio samples into left and right channels
+        int totalSamples = samples.Length / channels;
+        float[] left = new float[totalSamples];
+        float[] right = new float[totalSamples];
+
+        for (int i = 0; i < totalSamples; i++)
         {
-            throw new ArgumentException($"Sample rate must be {ModelSampleRate} Hz");
+            left[i] = samples[i * channels];
+            right[i] = samples[i * channels + 1];
         }
 
-        float[] monoSamples = ToMono(samples, channels);
-        // WavFileWriter.WriteFile($"{Application.persistentDataPath}/mono.wav", sampleRate, 1, monoSamples);
+        // Compute STFT - get complex spectrogram (magnitude and phase)
+        Stft stft = new Stft(FftWindowSize, FftHopSize, fftWindowType);
+        MagnitudePhaseList stftLeft = stft.MagnitudePhaseSpectrogram(left);
+        MagnitudePhaseList stftRight = stft.MagnitudePhaseSpectrogram(right);
 
-        // Process audio
-        List<float> outputSamples = new List<float>();
-        yield return ProcessMonoSamples(monoSamples, sampleRate, outputSamples);
+        int numFrames = stftLeft.Magnitudes.Count;
 
-        // Create result
-        if (outputSamples.Count == 0)
+        // Convert magnitude/phase to magnitude-only spectrograms for model input
+        float[][] leftMagnitudes = new float[numFrames][];
+        float[][] rightMagnitudes = new float[numFrames][];
+
+        for (int i = 0; i < numFrames; i++)
         {
-            throw new Exception("No output audio data was reconstructed");
-        }
+            // Keep only first 1024 frequency bins
+            leftMagnitudes[i] = new float[FrequencyBinCount];
+            rightMagnitudes[i] = new float[FrequencyBinCount];
 
-        LastResult = new Result { AudioClip = AudioClip.Create("Vocals", outputSamples.Count, 1, sampleRate, false) };
-        LastResult.AudioClip.SetData(outputSamples.ToArray(), 0);
-    }
-
-    private IEnumerator ProcessMonoSamples(float[] monoSamples, int sampleRate, List<float> outputSamples)
-    {
-        // Step 1: Run STFT
-        Stft stft = new Stft(FftWindowSize, FftHopSize, WindowType.Hann);
-        DiscreteSignal discreteSignal = new DiscreteSignal(sampleRate, monoSamples);
-        MagnitudePhaseList magPhase = stft.MagnitudePhaseSpectrogram(discreteSignal);
-
-        List<float[]> magnitudes = magPhase.Magnitudes;
-        int totalFrames = magnitudes.Count;
-        int binsPerFrame = magnitudes[0].Length;
-
-        // Step 2: Validate
-        if (binsPerFrame < FrequencyBinCount)
-        {
-            Debug.LogError(
-                $"STFT returned {binsPerFrame} frequency bins, but model requires at least {FrequencyBinCount}.");
-            yield break;
-        }
-
-        int framesPerSplit = TimeFrameCount;
-        int numSplits = totalFrames / framesPerSplit;
-        if (numSplits < 1)
-        {
-            Debug.LogError(
-                $"Not enough STFT frames ({totalFrames}) for at least one split of {framesPerSplit} frames.");
-            yield break;
-        }
-
-        // Step 3: Prepare tensor
-        Debug.Log($"input tensor shape: [BatchSize={BatchSize}, numSplits={numSplits}, framesPerSplit={framesPerSplit}, FrequencyBinCount={FrequencyBinCount}]");
-        TensorShape inputTensorShape = new TensorShape(BatchSize, numSplits, framesPerSplit, FrequencyBinCount);
-        using Tensor<float> inputTensor = new Tensor<float>(inputTensorShape);
-
-        // Step 4: Fill batch 0 (first audio clip)
-        for (int splitIdx = 0; splitIdx < numSplits; splitIdx++)
-        {
-            for (int frameIdx = 0; frameIdx < framesPerSplit; frameIdx++)
+            for (int f = 0; f < FrequencyBinCount && f < stftLeft.Magnitudes[i].Length; f++)
             {
-                int globalFrameIdx = splitIdx * framesPerSplit + frameIdx;
-                float[] frameMagnitude = magnitudes[globalFrameIdx];
+                leftMagnitudes[i][f] = stftLeft.Magnitudes[i][f];
+                rightMagnitudes[i][f] = stftRight.Magnitudes[i][f];
+            }
+        }
 
-                for (int binIdx = 0; binIdx < FrequencyBinCount; binIdx++)
+        // Pad to multiple of 512 frames (TimeFrameCount)
+        int padding = (TimeFrameCount - (numFrames % TimeFrameCount)) % TimeFrameCount;
+        int paddedFrames = numFrames + padding;
+        int numSplits = paddedFrames / TimeFrameCount;
+
+        Debug.Log($"Original frames: {numFrames}, Padding: {padding}, Padded frames: {paddedFrames}, Splits: {numSplits}");
+
+        // Pad magnitude arrays
+        float[][] paddedLeftMag = PadMagnitudes(leftMagnitudes, paddedFrames);
+        float[][] paddedRightMag = PadMagnitudes(rightMagnitudes, paddedFrames);
+
+        // Prepare input tensor: [2, numSplits, 512, 1024]
+        // Channel 0 = Left, Channel 1 = Right
+        using Tensor<float> inputTensor = new Tensor<float>(new TensorShape(BatchSize, numSplits, TimeFrameCount, FrequencyBinCount));
+
+        for (int split = 0; split < numSplits; split++)
+        {
+            for (int t = 0; t < TimeFrameCount; t++)
+            {
+                int frame = split * TimeFrameCount + t;
+                for (int f = 0; f < FrequencyBinCount; f++)
                 {
-                    inputTensor[0, splitIdx, frameIdx, binIdx] = frameMagnitude[binIdx];
+                    inputTensor[0, split, t, f] = paddedLeftMag[frame][f]; // Left channel
+                    inputTensor[1, split, t, f] = paddedRightMag[frame][f]; // Right channel
                 }
             }
         }
 
-        // Step 5: Zero out batch 1 (optional)
-        // for (int batchIdx = 1; batchIdx < BatchSize; batchIdx++)
-        // {
-        //     for (int splitIdx = 0; splitIdx < numSplits; splitIdx++)
-        //     {
-        //         for (int frameIdx = 0; frameIdx < framesPerSplit; frameIdx++)
-        //         {
-        //             for (int binIdx = 0; binIdx < FrequencyBinCount; binIdx++)
-        //             {
-        //                 inputTensor[batchIdx, splitIdx, frameIdx, binIdx] = 0f;
-        //             }
-        //         }
-        //     }
-        // }
+        // Run model inference
+        float[] vocalsStereoSamples = RunModel(
+            vocalsWorker,
+            inputTensor,
+            numFrames,
+            numSplits,
+            leftMagnitudes,
+            rightMagnitudes,
+            stftLeft,
+            stftRight,
+            stft);
+        
+        float[] accompanimentStereoSamples = RunModel(
+            accompanimentWorker,
+            inputTensor,
+            numFrames,
+            numSplits,
+            leftMagnitudes,
+            rightMagnitudes,
+            stftLeft,
+            stftRight,
+            stft);
+        
+        LastResult = new Result
+        {
+            Vocals = AudioClip.Create("vocals", vocalsStereoSamples.Length, channels, sampleRate, false),
+            Accompaniment = AudioClip.Create("accompaniment", accompanimentStereoSamples.Length, channels, sampleRate, false),
+        };
+        LastResult.Vocals.SetData(vocalsStereoSamples, 0);
+        LastResult.Accompaniment.SetData(accompanimentStereoSamples, 0);
+        yield return null;
+    }
 
-        // Run the model
+    private float[] RunModel(Worker worker, Tensor<float> inputTensor, int numFrames, int numSplits, float[][] leftMagnitudes,
+        float[][] rightMagnitudes, MagnitudePhaseList stftLeft, MagnitudePhaseList stftRight, Stft stft)
+    {
+        Debug.Log($"Running model inference with input tensor shape: {inputTensor.shape}");
+        
         worker.Schedule(inputTensor);
         using Tensor<float> outputTensor = worker.PeekOutput().ReadbackAndClone() as Tensor<float>;
-        Debug.Log($"Processed audio samples: model output shape: {outputTensor.shape}");
 
-        // Reconstruct samples from outputTensor
-        float[] resultSamples = ReconstructOutputSamples(outputTensor, stft, magPhase);
-        outputSamples.AddRange(resultSamples);
-    }
+        // Run accompaniment model inference (you'll need a separate worker for this)
+        // For now, we'll compute it as: accompaniment = sqrt(original^2 - vocals^2)
+        Debug.Log($"Output tensor shape: {outputTensor.shape}");
 
-    private float[] ReconstructOutputSamples(Tensor<float> outputTensor, Stft stft, MagnitudePhaseList magPhase)
-    {
-        List<float[]> outputMagnitudes = new List<float[]>();
-        List<float[]> outputPhases = magPhase.Phases; // original phases, same frame count
+        // Process the output using Wiener filtering
+        // spec = (spec^2 + 1e-10/2) / (spec^2 + accompaniment_spec^2 + 1e-10)
 
-        int numSplits = outputTensor.shape[1];
-        int timeFrameCount = outputTensor.shape[2]; // TimeFrameCount
-        int frequencyBinCount = outputTensor.shape[3]; // FrequencyBinCount
+        float[][] leftMask = new float[numFrames][];
+        float[][] rightMask = new float[numFrames][];
 
-        // Step 1: Flatten [numSplits, timeFrameCount, frequencyBinCount] into [totalFrames, frequencyBinCount]
-        for (int splitIdx = 0; splitIdx < numSplits; splitIdx++)
+        for (int i = 0; i < numFrames; i++)
         {
-            for (int frameIdx = 0; frameIdx < timeFrameCount; frameIdx++)
+            leftMask[i] = new float[FrequencyBinCount];
+            rightMask[i] = new float[FrequencyBinCount];
+        }
+
+        // Extract masks from model output
+        for (int split = 0; split < numSplits; split++)
+        {
+            for (int t = 0; t < TimeFrameCount; t++)
             {
-                float[] magnitude = new float[frequencyBinCount];
-                for (int binIdx = 0; binIdx < frequencyBinCount; binIdx++)
+                int frame = split * TimeFrameCount + t;
+                if (frame >= numFrames) continue;
+
+                for (int f = 0; f < FrequencyBinCount; f++)
                 {
-                    magnitude[binIdx] = outputTensor[0, splitIdx, frameIdx, binIdx];
+                    float left = outputTensor[0, split, t, f];
+                    float right = outputTensor[1, split, t, f];
+
+                    // Get original magnitudes
+                    float origLeft = leftMagnitudes[frame][f];
+                    float origRight = rightMagnitudes[frame][f];
+
+                    // Compute soft masks using Wiener filtering approach
+                    // This is a simplified version - ideally you'd have both vocals and accompaniment predictions
+                    float powerLeft = left * left + Epsilon / 2f;
+                    float powerRight = right * right + Epsilon / 2f;
+
+                    // TODO: For simplification, assume `accompaniment = original - vocals` ?
+                    float otherPowerLeft = Mathf.Max(0, origLeft * origLeft - powerLeft) + Epsilon / 2f;
+                    float otherPowerRight = Mathf.Max(0, origRight * origRight - powerRight) + Epsilon / 2f;
+
+                    float totalPowerLeft = powerLeft + otherPowerLeft + Epsilon;
+                    float totalPowerRight = powerRight + otherPowerRight + Epsilon;
+
+                    leftMask[frame][f] = powerLeft / totalPowerLeft;
+                    rightMask[frame][f] = powerRight / totalPowerRight;
                 }
-                outputMagnitudes.Add(magnitude);
             }
         }
 
-        // Step 2: Reconstruct full spectrogram using original phase
-        int totalFrames = outputMagnitudes.Count;
-        if (outputPhases.Count < totalFrames)
+        // Apply masks to original complex spectrograms
+        MagnitudePhaseList vocalsLeftSpec = ApplyMaskToComplexSpectrum(stftLeft, leftMask, numFrames);
+        MagnitudePhaseList vocalsRightSpec = ApplyMaskToComplexSpectrum(stftRight, rightMask, numFrames);
+
+        // Reconstruct time-domain signals
+        float[] vocalsLeftOut = stft.ReconstructMagnitudePhase(vocalsLeftSpec);
+        float[] vocalsRightOut = stft.ReconstructMagnitudePhase(vocalsRightSpec);
+
+        // Ensure both channels have the same length
+        int outputLength = Mathf.Min(vocalsLeftOut.Length, vocalsRightOut.Length);
+
+        // Interleave left and right channels into stereo output
+        float[] stereoOutput = new float[outputLength * 2];
+        for (int i = 0; i < outputLength; i++)
         {
-            Debug.LogWarning("Phase frame count is smaller than required. Truncating magnitude list.");
-            outputMagnitudes = outputMagnitudes.GetRange(0, outputPhases.Count);
-            totalFrames = outputMagnitudes.Count;
+            stereoOutput[2 * i] = vocalsLeftOut[i];
+            stereoOutput[2 * i + 1] = vocalsRightOut[i];
         }
 
-        MagnitudePhaseList reconstructedSpectrogram = new MagnitudePhaseList
+        Debug.Log($"Audio separation complete. Output length: {stereoOutput.Length}");
+        return stereoOutput;
+    }
+
+    // Helper method to pad magnitude arrays
+    private float[][] PadMagnitudes(float[][] magnitudes, int targetFrames)
+    {
+        float[][] padded = new float[targetFrames][];
+        int originalFrames = magnitudes.Length;
+
+        for (int i = 0; i < targetFrames; i++)
         {
-            Magnitudes = outputMagnitudes,
-            Phases = outputPhases.GetRange(0, totalFrames) // Match frame count
-        };
+            padded[i] = new float[FrequencyBinCount];
+            if (i < originalFrames)
+            {
+                // Copy original data
+                Array.Copy(magnitudes[i], padded[i], Mathf.Min(magnitudes[i].Length, FrequencyBinCount));
+            }
+            // Padding frames are already initialized to zero
+        }
 
-        // Step 3: Inverse STFT to reconstruct time-domain signal
-        float[] outputSamples = stft.ReconstructMagnitudePhase(reconstructedSpectrogram);
+        return padded;
+    }
 
-        return outputSamples;
+    // Helper method to apply mask to complex spectrum while preserving phase
+    private MagnitudePhaseList ApplyMaskToComplexSpectrum(MagnitudePhaseList originalSpectrum, float[][] mask, int numFrames)
+    {
+        List<float[]> maskedMagnitudes = new List<float[]>();
+        List<float[]> maskedPhases = new List<float[]>();
+
+        for (int i = 0; i < numFrames; i++)
+        {
+            float[] maskedMag = new float[originalSpectrum.Magnitudes[i].Length];
+            float[] originalPhase = originalSpectrum.Phases[i];
+
+            // Apply mask to magnitude, keep original phase
+            for (int f = 0; f < maskedMag.Length; f++)
+            {
+                if (f < FrequencyBinCount)
+                {
+                    maskedMag[f] = originalSpectrum.Magnitudes[i][f] * mask[i][f];
+                }
+                else
+                {
+                    // For frequencies beyond 1024, you might want to zero them out or copy original
+                    maskedMag[f] = originalSpectrum.Magnitudes[i][f] * (f < 1024 ? mask[i][f] : 0f);
+                }
+            }
+
+            maskedMagnitudes.Add(maskedMag);
+            maskedPhases.Add(originalPhase); // Keep original phase
+        }
+
+        return new MagnitudePhaseList { Magnitudes = maskedMagnitudes, Phases = maskedPhases };
     }
 
     public void Dispose()
     {
-        worker?.Dispose();
-        worker = null;
-    }
-
-    private static float[] ToMono(float[] samples, int channels)
-    {
-        if (channels == 1)
-        {
-            return samples.ToArray();
-        }
-
-        int monoSamplesLength = samples.Length / channels;
-        float[] monoSamples = new float[monoSamplesLength];
-        for (int monoSamplesIndex = 0; monoSamplesIndex < monoSamplesLength; monoSamplesIndex++)
-        {
-            float sum = 0f;
-            for (int channel = 0; channel < channels; channel++)
-            {
-                sum += samples[monoSamplesIndex * channels + channel];
-            }
-
-            monoSamples[monoSamplesIndex] = sum / channels;
-        }
-
-        return monoSamples;
+        vocalsWorker?.Dispose();
+        vocalsWorker = null;
     }
 
     public class Result
     {
-        public AudioClip AudioClip { get; set; }
+        public AudioClip Vocals { get; set; }
+        public AudioClip Accompaniment { get; set; }
     }
 }

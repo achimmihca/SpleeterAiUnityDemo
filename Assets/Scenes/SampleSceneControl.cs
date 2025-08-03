@@ -2,11 +2,7 @@ using System;
 using UnityEngine;
 using Unity.Sentis;
 using System.Collections;
-using System.Collections.Generic;
 using System.IO;
-using NWaves.Signals;
-using NWaves.Transforms;
-using NWaves.Windows;
 using UnityEngine.Networking;
 
 public class SampleSceneControl : MonoBehaviour
@@ -17,10 +13,6 @@ public class SampleSceneControl : MonoBehaviour
     private string audioFileName = "audio_example_long.ogg";
     private bool saveSeparatedAudio = true;
     
-    private AudioClip originalAudioClip;
-    private AudioClip vocalsAudioClip;
-    private AudioClip accompanimentAudioClip;
-
     private SpleeterAudioSeparator spleeterAudioSeparator;
     
     void Start()
@@ -35,22 +27,24 @@ public class SampleSceneControl : MonoBehaviour
         Debug.Log("Loading AudioClip");
         Wrapper originalAudioClipWrapper = new Wrapper();
         yield return LoadAudioFile($"{Application.dataPath}/Scenes/{audioFileName}", originalAudioClipWrapper);
-        AudioClip audioClip = originalAudioClipWrapper.Obj as AudioClip;
-        Debug.Log($"Loaded AudioClip: samples: {audioClip.samples}, channels: {audioClip.channels}, frequency: {audioClip.frequency}");
+        AudioClip originalAudioClip = originalAudioClipWrapper.Obj as AudioClip;
+        Debug.Log($"Loaded AudioClip: samples: {originalAudioClip.samples}, channels: {originalAudioClip.channels}, frequency: {originalAudioClip.frequency}");
 
         Debug.Log("Loading Spleeter model");
         spleeterAudioSeparator?.Dispose();
-        spleeterAudioSeparator = new SpleeterAudioSeparator(vocalsModelAsset);
-        spleeterAudioSeparator.LoadModel();
+        spleeterAudioSeparator = new SpleeterAudioSeparator(vocalsModelAsset, accompanimentModelAsset);
+        spleeterAudioSeparator.LoadModels();
         Debug.Log("Loaded Spleeter model");
         
         Debug.Log("Processing audio with Spleeter");
-        yield return spleeterAudioSeparator.Process(originalAudioClipWrapper.Obj as AudioClip);
+        yield return spleeterAudioSeparator.Process(originalAudioClip);
         Debug.Log("Processed audio with Spleeter");
 
         if (saveSeparatedAudio)
         {
-            SaveAudioClip(spleeterAudioSeparator.LastResult.AudioClip);
+            SaveAudioClip(originalAudioClip, "original");
+            SaveAudioClip(spleeterAudioSeparator.LastResult.Vocals);
+            SaveAudioClip(spleeterAudioSeparator.LastResult.Accompaniment);
         }
     }
 
@@ -63,7 +57,7 @@ public class SampleSceneControl : MonoBehaviour
 
         // Load audio file using Unity's WWW (for older Unity versions) or UnityWebRequest
         string url = "file://" + filePath;
-        using var www = UnityWebRequestMultimedia.GetAudioClip(url, AudioType.OGGVORBIS);
+        using UnityWebRequest www = UnityWebRequestMultimedia.GetAudioClip(url, AudioType.OGGVORBIS);
         yield return www.SendWebRequest();
 
         if (www.result != UnityWebRequest.Result.Success)
@@ -75,10 +69,11 @@ public class SampleSceneControl : MonoBehaviour
         target.Obj = audioClip;
     }
 
-    private void SaveAudioClip(AudioClip audioClip)
+    private void SaveAudioClip(AudioClip audioClip, string name = null)
     {
         Debug.Log($"Saving AudioClip '{audioClip.name}'");
-        string absoluteOutputFile = $"{Application.persistentDataPath}/{audioClip.name}.wav";
+        string fileBaseName = name ?? audioClip.name;
+        string absoluteOutputFile = $"{Application.persistentDataPath}/{fileBaseName}.wav";
         WavFileWriter.WriteFile(absoluteOutputFile, audioClip);
         Debug.Log($"Saved AudioClip '{audioClip.name}' to: {absoluteOutputFile}");
     }
@@ -95,10 +90,4 @@ public class SampleSceneControl : MonoBehaviour
     {
         public object Obj { get; set; }
     }
-
-    // Public methods for external access
-    public AudioClip GetVocalsAudioClip() => vocalsAudioClip;
-    public AudioClip GetAccompanimentAudioClip() => accompanimentAudioClip;
-    public AudioClip GetOriginalAudioClip() => originalAudioClip;
-    public bool IsProcessing() => spleeterAudioSeparator?.IsProcessing ?? false;
 }
