@@ -420,9 +420,6 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: b35b5b79904723c439ae4062e30e19cd, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
-  audioFileName: audio_example.ogg
-  saveSeparatedAudio: 1
-  outputFolder: SeparatedAudio
   vocalsModelAsset: {fileID: 5022602860645237092, guid: 3f6f3bcaf76b8974f9dc9ddf4d99b29a, type: 3}
   accompanimentModelAsset: {fileID: 5022602860645237092, guid: cfadcf9b73618cb409d30031a6c5fcb7, type: 3}
 --- !u!4 &710113575
@@ -434,54 +431,6 @@ Transform:
   m_GameObject: {fileID: 710113573}
   serializedVersion: 2
   m_LocalRotation: {x: -0, y: -0, z: -0, w: 1}
-  m_LocalPosition: {x: 0, y: 0, z: 0}
-  m_LocalScale: {x: 1, y: 1, z: 1}
-  m_ConstrainProportionsScale: 0
-  m_Children: []
-  m_Father: {fileID: 0}
-  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
---- !u!1 &1519136228
-GameObject:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  serializedVersion: 6
-  m_Component:
-  - component: {fileID: 1519136230}
-  - component: {fileID: 1519136229}
-  m_Layer: 0
-  m_Name: SpleeterUIToolkit
-  m_TagString: Untagged
-  m_Icon: {fileID: 0}
-  m_NavMeshLayer: 0
-  m_StaticEditorFlags: 0
-  m_IsActive: 1
---- !u!114 &1519136229
-MonoBehaviour:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 1519136228}
-  m_Enabled: 1
-  m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: 25e9a7d5c8f14ae4caee61f2d742b680, type: 3}
-  m_Name: 
-  m_EditorClassIdentifier: 
-  uiDocument: {fileID: 500972139}
-  originalAudioSource: {fileID: 0}
-  vocalsAudioSource: {fileID: 0}
-  accompanimentAudioSource: {fileID: 0}
---- !u!4 &1519136230
-Transform:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 1519136228}
-  serializedVersion: 2
-  m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
   m_LocalPosition: {x: 0, y: 0, z: 0}
   m_LocalScale: {x: 1, y: 1, z: 1}
   m_ConstrainProportionsScale: 0
@@ -576,4 +525,3 @@ SceneRoots:
   - {fileID: 1854875703}
   - {fileID: 710113575}
   - {fileID: 500972140}
-  - {fileID: 1519136230}
