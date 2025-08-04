@@ -26,9 +26,9 @@ public class SampleSceneControl : MonoBehaviour
     public IEnumerator ProcessOriginalAudio()
     {
         Debug.Log("Loading AudioClip");
-        Wrapper originalAudioClipWrapper = new Wrapper();
-        yield return LoadAudioFile($"{Application.dataPath}/Scenes/{audioFileName}", originalAudioClipWrapper);
-        AudioClip originalAudioClip = originalAudioClipWrapper.Obj as AudioClip;
+        AudioClipLoader.AudioClipWrapper originalAudioClipWrapper = new();
+        yield return AudioClipLoader.LoadCoroutine($"{Application.dataPath}/Scenes/{audioFileName}", originalAudioClipWrapper);
+        AudioClip originalAudioClip = originalAudioClipWrapper.audioClip;
         Debug.Log($"Loaded AudioClip: samples: {originalAudioClip.samples}, channels: {originalAudioClip.channels}, frequency: {originalAudioClip.frequency}");
 
         Debug.Log("Loading Spleeter model");
@@ -38,7 +38,7 @@ public class SampleSceneControl : MonoBehaviour
         Debug.Log("Loaded Spleeter model");
         
         Debug.Log("Processing audio with Spleeter");
-        yield return spleeterAudioSeparator.Process(originalAudioClip);
+        spleeterAudioSeparator.Process(originalAudioClip);
         Debug.Log("Processed audio with Spleeter");
 
         if (saveSeparatedAudio)
@@ -47,27 +47,6 @@ public class SampleSceneControl : MonoBehaviour
             SaveAudioClip(spleeterAudioSeparator.LastResult.Vocals);
             SaveAudioClip(spleeterAudioSeparator.LastResult.Accompaniment);
         }
-    }
-
-    private IEnumerator LoadAudioFile(string filePath, Wrapper target)
-    {
-        if (!File.Exists(filePath))
-        {
-            throw new ArgumentException($"Audio file not found: {filePath}");
-        }
-
-        // Load audio file using Unity's WWW (for older Unity versions) or UnityWebRequest
-        string url = "file://" + filePath;
-        using UnityWebRequest www = UnityWebRequestMultimedia.GetAudioClip(url, AudioType.OGGVORBIS);
-        yield return www.SendWebRequest();
-
-        if (www.result != UnityWebRequest.Result.Success)
-        {
-            throw new InvalidOperationException($"Failed to load audio file: {www.error}");
-        }
-
-        AudioClip audioClip = DownloadHandlerAudioClip.GetContent(www);
-        target.Obj = audioClip;
     }
 
     private void SaveAudioClip(AudioClip audioClip, string name = null)
@@ -82,13 +61,5 @@ public class SampleSceneControl : MonoBehaviour
     void OnDestroy()
     {
         spleeterAudioSeparator?.Dispose();
-    }
-
-    /**
-     * Wraps a reference to an object to allow passing it by reference in coroutines.
-     */
-    private class Wrapper
-    {
-        public object Obj { get; set; }
     }
 }

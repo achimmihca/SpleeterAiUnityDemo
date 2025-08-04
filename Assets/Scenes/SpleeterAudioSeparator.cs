@@ -73,17 +73,17 @@ public class SpleeterAudioSeparator : IDisposable
         HasLoadedModels = true;
     }
 
-    public IEnumerator Process(AudioClip audioClip)
+    public void Process(AudioClip audioClip)
     {
         int sampleRate = audioClip.frequency;
         int channels = audioClip.channels;
         float[] samples = new float[audioClip.samples * audioClip.channels];
         audioClip.GetData(samples, 0);
 
-        yield return Process(samples, sampleRate, channels);
+        Process(samples, sampleRate, channels);
     }
 
-    public IEnumerator Process(float[] samples, int sampleRate, int channels)
+    public void Process(float[] samples, int sampleRate, int channels)
     {
         if (vocalsModel == null)
         {
@@ -99,7 +99,7 @@ public class SpleeterAudioSeparator : IDisposable
 
         try
         {
-            yield return ProcessInternal(samples, sampleRate, channels);
+            ProcessInternal(samples, sampleRate, channels);
         }
         finally
         {
@@ -107,7 +107,7 @@ public class SpleeterAudioSeparator : IDisposable
         }
     }
 
-    private IEnumerator ProcessInternal(float[] inputSamples, int inputSampleRate, int channels)
+    private void ProcessInternal(float[] inputSamples, int inputSampleRate, int channels)
     {
         float[] resampledSamples = Resample(inputSamples, inputSampleRate, ModelSampleRate);
         
@@ -204,7 +204,6 @@ public class SpleeterAudioSeparator : IDisposable
         };
         LastResult.Vocals.SetData(vocalsStereoSamples, 0);
         LastResult.Accompaniment.SetData(accompanimentStereoSamples, 0);
-        yield return null;
     }
 
     private float[] RunModel(Worker worker, Tensor<float> inputTensor, int numFrames, int numSplits, float[][] leftMagnitudes,
