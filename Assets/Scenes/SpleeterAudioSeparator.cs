@@ -345,6 +345,9 @@ public class SpleeterAudioSeparator : IDisposable
     {
         vocalsWorker?.Dispose();
         vocalsWorker = null;
+        
+        accompanimentWorker?.Dispose();
+        accompanimentWorker = null;
     }
 
     public class Result
