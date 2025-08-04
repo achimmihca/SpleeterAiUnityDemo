@@ -53,6 +53,7 @@ public class SpleeterAudioSeparator : IDisposable
     private Worker accompanimentWorker;
     
     public bool IsProcessing { get; private set; }
+    public bool HasLoadedModels { get; private set; }
     public Result LastResult { get; private set; }
 
     public SpleeterAudioSeparator(ModelAsset vocalsModelAsset, ModelAsset accompanimentModelAsset, BackendType backendType = BackendType.CPU)
@@ -63,18 +64,13 @@ public class SpleeterAudioSeparator : IDisposable
 
     public void LoadModels()
     {
-        try
-        {
-            vocalsModel = ModelLoader.Load(vocalsModelAsset);
-            vocalsWorker = new Worker(vocalsModel, backendType);
-            
-            accompanimentModel = ModelLoader.Load(accompanimentModelAsset);
-            accompanimentWorker = new Worker(accompanimentModel, backendType);
-        }
-        catch (Exception e)
-        {
-            Debug.LogError($"Error loading model: {e.Message}");
-        }
+        vocalsModel = ModelLoader.Load(vocalsModelAsset);
+        vocalsWorker = new Worker(vocalsModel, backendType);
+        
+        accompanimentModel = ModelLoader.Load(accompanimentModelAsset);
+        accompanimentWorker = new Worker(accompanimentModel, backendType);
+
+        HasLoadedModels = true;
     }
 
     public IEnumerator Process(AudioClip audioClip)
