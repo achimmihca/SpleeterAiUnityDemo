@@ -9,6 +9,7 @@ public class SampleSceneControl : MonoBehaviour
 {
     public ModelAsset vocalsModelAsset;
     public ModelAsset accompanimentModelAsset;
+    public BackendType backendType = BackendType.CPU;
 
     private string audioFileName = "audio_example_long.ogg";
     private bool saveSeparatedAudio = true;
@@ -32,7 +33,7 @@ public class SampleSceneControl : MonoBehaviour
 
         Debug.Log("Loading Spleeter model");
         spleeterAudioSeparator?.Dispose();
-        spleeterAudioSeparator = new SpleeterAudioSeparator(vocalsModelAsset, accompanimentModelAsset);
+        spleeterAudioSeparator = new SpleeterAudioSeparator(vocalsModelAsset, accompanimentModelAsset, backendType);
         spleeterAudioSeparator.LoadModels();
         Debug.Log("Loaded Spleeter model");
         
