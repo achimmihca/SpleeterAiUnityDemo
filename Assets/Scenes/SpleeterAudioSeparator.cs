@@ -60,6 +60,7 @@ public class SpleeterAudioSeparator : IDisposable
     {
         this.vocalsModelAsset = vocalsModelAsset;
         this.accompanimentModelAsset = accompanimentModelAsset;
+        this.backendType = backendType;
     }
 
     public void LoadModels()
