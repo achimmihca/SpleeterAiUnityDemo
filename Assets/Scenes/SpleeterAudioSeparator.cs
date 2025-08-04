@@ -199,8 +199,8 @@ public class SpleeterAudioSeparator : IDisposable
         
         LastResult = new Result
         {
-            Vocals = AudioClip.Create("vocals", vocalsStereoSamples.Length, channels, ModelSampleRate, false),
-            Accompaniment = AudioClip.Create("accompaniment", accompanimentStereoSamples.Length, channels, ModelSampleRate, false),
+            Vocals = AudioClip.Create("vocals", vocalsStereoSamples.Length / channels, channels, ModelSampleRate, false),
+            Accompaniment = AudioClip.Create("accompaniment", accompanimentStereoSamples.Length / channels, channels, ModelSampleRate, false),
         };
         LastResult.Vocals.SetData(vocalsStereoSamples, 0);
         LastResult.Accompaniment.SetData(accompanimentStereoSamples, 0);
