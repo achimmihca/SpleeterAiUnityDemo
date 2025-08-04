@@ -3,6 +3,8 @@ using UnityEngine;
 using Unity.Sentis;
 using System.Collections;
 using System.Collections.Generic;
+using NWaves.Operations;
+using NWaves.Signals;
 using NWaves.Transforms;
 using NWaves.Windows;
 
@@ -109,17 +111,19 @@ public class SpleeterAudioSeparator : IDisposable
         }
     }
 
-    private IEnumerator ProcessInternal(float[] samples, int sampleRate, int channels)
+    private IEnumerator ProcessInternal(float[] inputSamples, int inputSampleRate, int channels)
     {
+        float[] resampledSamples = Resample(inputSamples, inputSampleRate, ModelSampleRate);
+        
         // De-interleave stereo audio samples into left and right channels
-        int totalSamples = samples.Length / channels;
+        int totalSamples = resampledSamples.Length / channels;
         float[] left = new float[totalSamples];
         float[] right = new float[totalSamples];
 
         for (int i = 0; i < totalSamples; i++)
         {
-            left[i] = samples[i * channels];
-            right[i] = samples[i * channels + 1];
+            left[i] = resampledSamples[i * channels];
+            right[i] = resampledSamples[i * channels + 1];
         }
 
         // Compute STFT - get complex spectrogram (magnitude and phase)
@@ -199,8 +203,8 @@ public class SpleeterAudioSeparator : IDisposable
         
         LastResult = new Result
         {
-            Vocals = AudioClip.Create("vocals", vocalsStereoSamples.Length, channels, sampleRate, false),
-            Accompaniment = AudioClip.Create("accompaniment", accompanimentStereoSamples.Length, channels, sampleRate, false),
+            Vocals = AudioClip.Create("vocals", vocalsStereoSamples.Length, channels, ModelSampleRate, false),
+            Accompaniment = AudioClip.Create("accompaniment", accompanimentStereoSamples.Length, channels, ModelSampleRate, false),
         };
         LastResult.Vocals.SetData(vocalsStereoSamples, 0);
         LastResult.Accompaniment.SetData(accompanimentStereoSamples, 0);
@@ -339,6 +343,19 @@ public class SpleeterAudioSeparator : IDisposable
         }
 
         return new MagnitudePhaseList { Magnitudes = maskedMagnitudes, Phases = maskedPhases };
+    }
+    
+    public static float[] Resample(float[] inputSamples, int originalSampleRate, int targetSampleRate)
+    {
+        if (originalSampleRate == targetSampleRate)
+        {
+            return inputSamples;
+        }
+        
+        DiscreteSignal inputSignal = new DiscreteSignal(originalSampleRate, inputSamples);
+        Resampler resampler = new Resampler();
+        DiscreteSignal resampledSignal = resampler.Resample(inputSignal, targetSampleRate);
+        return resampledSignal.Samples;
     }
 
     public void Dispose()
