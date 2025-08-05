@@ -17,8 +17,8 @@ public class SpleeterAudioSeparatorTest
 
     private static string testAudioFolder = $"{Application.dataPath}/Tests/TestAudio";
 
-    private static List<string> testAudioFiles = Directory.GetFiles(testAudioFolder, "*.ogg")
-        .Select(path => Path.GetFileName(path))
+    private static List<TestAudioFile> testAudioFiles = Directory.GetFiles(testAudioFolder, "*.ogg", SearchOption.AllDirectories)
+        .Select(path => new TestAudioFile { path = path })
         .ToList();
 
     private static List<BackendType> backendTypes = new List<BackendType>()
@@ -53,12 +53,12 @@ public class SpleeterAudioSeparatorTest
 
     [Test]
     [TestCaseSource(nameof(testAudioFiles))]
-    public void ShouldProcessAudio(string audioFileName)
+    public void ShouldProcessAudio(TestAudioFile testAudioFile)
     {
-        AudioClip audioClip = LoadAudioClip($"{testAudioFolder}/{audioFileName}");
+        AudioClip audioClip = LoadAudioClip(testAudioFile.path);
         Assert.IsNotNull(audioClip);
 
-        using var d = new DisposableStopwatch($"processing AudioClip '{audioFileName}'");
+        using var d = new DisposableStopwatch($"processing AudioClip '{testAudioFile}'");
         separator.Process(audioClip);
         AssertResult(separator.LastResult, audioClip);
     }
@@ -83,8 +83,8 @@ public class SpleeterAudioSeparatorTest
         Assert.IsNotNull(result.Accompaniment, "Accompaniment is null");
         Assert.AreEqual(44100, result.Vocals.frequency, "Vocals sample rate mismatch");
         Assert.AreEqual(44100, result.Accompaniment.frequency, "Accompaniment sample rate mismatch");
-        Assert.AreEqual(originalAudioClip.channels, result.Vocals.channels, "Vocals channels mismatch");
-        Assert.AreEqual(originalAudioClip.channels, result.Accompaniment.channels, "Accompaniment channels mismatch");
+        Assert.AreEqual(2, result.Vocals.channels, "Vocals channels mismatch");
+        Assert.AreEqual(2, result.Accompaniment.channels, "Accompaniment channels mismatch");
         Assert.AreEqual(originalAudioClip.length, result.Vocals.length, 0.1f, "Vocals length mismatch");
         Assert.AreEqual(originalAudioClip.length, result.Accompaniment.length, 0.1f, "Accompaniment length mismatch");
     }
@@ -99,5 +99,15 @@ public class SpleeterAudioSeparatorTest
         }
 
         return AssetDatabase.LoadAssetAtPath<AudioClip>(path);
+    }
+
+    public class TestAudioFile
+    {
+        public string path;
+
+        public override string ToString()
+        {
+            return Path.GetFileName(path);
+        }
     }
 }
