@@ -108,19 +108,24 @@ public class SpleeterAudioSeparator : IDisposable
         }
     }
 
-    private void ProcessInternal(float[] inputSamples, int inputSampleRate, int channels)
+    private void ProcessInternal(float[] inputSamples, int inputSampleRate, int originalChannels)
     {
-        float[] resampledSamples = Resample(inputSamples, inputSampleRate, ModelSampleRate);
+        // The model expects audio at 44100 Hz sample rate
+        float[] normalizedSamples = Resample(inputSamples, inputSampleRate, ModelSampleRate);
         
+        // The model works with stereo audio
+        normalizedSamples = ToStereo(normalizedSamples, originalChannels);
+        int channels = 2;
+
         // De-interleave stereo audio samples into left and right channels
-        int totalSamples = resampledSamples.Length / channels;
+        int totalSamples = normalizedSamples.Length / channels;
         float[] left = new float[totalSamples];
         float[] right = new float[totalSamples];
 
         for (int i = 0; i < totalSamples; i++)
         {
-            left[i] = resampledSamples[i * channels];
-            right[i] = resampledSamples[i * channels + 1];
+            left[i] = normalizedSamples[i * channels];
+            right[i] = normalizedSamples[i * channels + 1];
         }
 
         // Compute STFT - get complex spectrogram (magnitude and phase)
@@ -340,8 +345,8 @@ public class SpleeterAudioSeparator : IDisposable
 
         return new MagnitudePhaseList { Magnitudes = maskedMagnitudes, Phases = maskedPhases };
     }
-    
-    public static float[] Resample(float[] inputSamples, int originalSampleRate, int targetSampleRate)
+
+    private static float[] Resample(float[] inputSamples, int originalSampleRate, int targetSampleRate)
     {
         if (originalSampleRate == targetSampleRate)
         {
@@ -352,6 +357,52 @@ public class SpleeterAudioSeparator : IDisposable
         Resampler resampler = new Resampler();
         DiscreteSignal resampledSignal = resampler.Resample(inputSignal, targetSampleRate);
         return resampledSignal.Samples;
+    }
+
+
+    private float[] ToStereo(float[] samples, int channels)
+    {
+        if (channels == 2)
+        {
+            return samples;
+        }
+
+        int samplesPerChannel = samples.Length / channels;
+        float[] stereoSamples = new float[samplesPerChannel * 2];
+        
+        if (channels == 1)
+        {
+            // Mono to stereo: duplicate mono channel to both left and right
+            stereoSamples = new float[samples.Length * 2];
+            for (int i = 0; i < samples.Length; i++)
+            {
+                stereoSamples[i * 2] = samples[i]; // Left channel
+                stereoSamples[i * 2 + 1] = samples[i]; // Right channel
+            }
+
+            return stereoSamples;
+        }
+
+        // Multi-channel to stereo: down-mix to stereo
+        for (int i = 0; i < samplesPerChannel; i++)
+        {
+            float left = 0f;
+            float right = 0f;
+
+            // Mix all channels equally into both left and right
+            float mixLevel = 1.0f / channels;
+            for (int ch = 0; ch < channels; ch++)
+            {
+                float sample = samples[i * channels + ch] * mixLevel;
+                left += sample;
+                right += sample;
+            }
+
+            // Clamp to prevent clipping
+            stereoSamples[i * 2] = Math.Max(-1.0f, Math.Min(1.0f, left)); // Left
+            stereoSamples[i * 2 + 1] = Math.Max(-1.0f, Math.Min(1.0f, right)); // Right
+        }
+        return stereoSamples;
     }
 
     public void Dispose()
