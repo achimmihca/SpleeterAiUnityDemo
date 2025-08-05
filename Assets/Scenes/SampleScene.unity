@@ -422,7 +422,7 @@ MonoBehaviour:
   m_EditorClassIdentifier: 
   vocalsModelAsset: {fileID: 5022602860645237092, guid: 3f6f3bcaf76b8974f9dc9ddf4d99b29a, type: 3}
   accompanimentModelAsset: {fileID: 5022602860645237092, guid: cfadcf9b73618cb409d30031a6c5fcb7, type: 3}
-  backendType: 256
+  backendType: 512
 --- !u!4 &710113575
 Transform:
   m_ObjectHideFlags: 0
