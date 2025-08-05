@@ -215,13 +215,28 @@ public class SpleeterAudioSeparator : IDisposable
     private float[] RunModel(Worker worker, Tensor<float> inputTensor, int numFrames, int numSplits, float[][] leftMagnitudes,
         float[][] rightMagnitudes, MagnitudePhaseList stftLeft, MagnitudePhaseList stftRight, Stft stft)
     {
+        using var d = new DisposableStopwatch("RunModel");
+        
         Debug.Log($"Running model inference with input tensor shape: {inputTensor.shape}");
         
         worker.Schedule(inputTensor);
         using Tensor<float> outputTensor = worker.PeekOutput().ReadbackAndClone() as Tensor<float>;
 
-        // Run accompaniment model inference (you'll need a separate worker for this)
-        // For now, we'll compute it as: accompaniment = sqrt(original^2 - vocals^2)
+        return OutputTensorToStereoSamples(numFrames, numSplits, leftMagnitudes, rightMagnitudes, stftLeft, stftRight, stft, outputTensor);
+    }
+
+    private float[] OutputTensorToStereoSamples(
+        int numFrames,
+        int numSplits,
+        float[][] leftMagnitudes,
+        float[][] rightMagnitudes,
+        MagnitudePhaseList stftLeft,
+        MagnitudePhaseList stftRight,
+        Stft stft,
+        Tensor<float> outputTensor)
+    {
+        using var d = new DisposableStopwatch("OutputTensorToStereoSamples");
+        
         Debug.Log($"Output tensor shape: {outputTensor.shape}");
 
         // Process the output using Wiener filtering
