@@ -1,6 +1,6 @@
 using System;
 using UnityEngine;
-using Unity.Sentis;
+using Unity.InferenceEngine;
 using System.Collections;
 using System.Collections.Generic;
 using NWaves.Operations;

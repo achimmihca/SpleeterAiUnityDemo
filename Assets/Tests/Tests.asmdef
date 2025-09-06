@@ -5,7 +5,7 @@
         "UnityEngine.TestRunner",
         "UnityEditor.TestRunner",
         "SpleeterUnity",
-        "Unity.Sentis"
+        "Unity.InferenceEngine"
     ],
     "includePlatforms": [
         "Editor"

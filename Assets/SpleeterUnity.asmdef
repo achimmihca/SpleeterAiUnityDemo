@@ -2,7 +2,7 @@
     "name": "SpleeterUnity",
     "rootNamespace": "",
     "references": [
-        "GUID:c98377141161c7746a178fb5cb1af075"
+        "Unity.InferenceEngine"
     ],
     "includePlatforms": [],
     "excludePlatforms": [],
